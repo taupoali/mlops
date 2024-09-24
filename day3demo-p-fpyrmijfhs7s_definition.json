@@ -1,0 +1,327 @@
+{
+    "Version": "2020-12-01",
+    "Metadata": {},
+    "Parameters": [
+        {
+            "Name": "ProcessingInstanceCount",
+            "Type": "Integer",
+            "DefaultValue": 1
+        },
+        {
+            "Name": "ModelApprovalStatus",
+            "Type": "String",
+            "DefaultValue": "PendingManualApproval"
+        },
+        {
+            "Name": "InputDataUrl",
+            "Type": "String",
+            "DefaultValue": "s3://sagemaker-servicecatalog-seedcode-eu-west-2/dataset/abalone-dataset.csv"
+        }
+    ],
+    "PipelineExperimentConfig": {
+        "ExperimentName": {
+            "Get": "Execution.PipelineName"
+        },
+        "TrialName": {
+            "Get": "Execution.PipelineExecutionId"
+        }
+    },
+    "Steps": [
+        {
+            "Name": "PreprocessAbaloneData",
+            "Type": "Processing",
+            "Arguments": {
+                "ProcessingResources": {
+                    "ClusterConfig": {
+                        "InstanceType": "ml.m5.xlarge",
+                        "InstanceCount": {
+                            "Get": "Parameters.ProcessingInstanceCount"
+                        },
+                        "VolumeSizeInGB": 30
+                    }
+                },
+                "AppSpecification": {
+                    "ImageUri": "764974769150.dkr.ecr.eu-west-2.amazonaws.com/sagemaker-scikit-learn:0.23-1-cpu-py3",
+                    "ContainerArguments": [
+                        "--input-data",
+                        {
+                            "Get": "Parameters.InputDataUrl"
+                        }
+                    ],
+                    "ContainerEntrypoint": [
+                        "python3",
+                        "/opt/ml/processing/input/code/preprocess.py"
+                    ]
+                },
+                "RoleArn": "arn:aws:iam::485186561655:role/service-role/AmazonSageMakerServiceCatalogProductsUseRole",
+                "ProcessingInputs": [
+                    {
+                        "InputName": "code",
+                        "AppManaged": false,
+                        "S3Input": {
+                            "S3Uri": "s3://sagemaker-project-p-fpyrmijfhs7s/day3demo-p-fpyrmijfhs7s/sklearn-abalone-2024-06-20-07-21-03-922/input/code/preprocess.py",
+                            "LocalPath": "/opt/ml/processing/input/code",
+                            "S3DataType": "S3Prefix",
+                            "S3InputMode": "File",
+                            "S3DataDistributionType": "FullyReplicated",
+                            "S3CompressionType": "None"
+                        }
+                    }
+                ],
+                "ProcessingOutputConfig": {
+                    "Outputs": [
+                        {
+                            "OutputName": "train",
+                            "AppManaged": false,
+                            "S3Output": {
+                                "S3Uri": "s3://sagemaker-project-p-fpyrmijfhs7s/day3demo-p-fpyrmijfhs7s/sklearn-abalone-2024-06-20-07-21-03-922/output/train",
+                                "LocalPath": "/opt/ml/processing/train",
+                                "S3UploadMode": "EndOfJob"
+                            }
+                        },
+                        {
+                            "OutputName": "validation",
+                            "AppManaged": false,
+                            "S3Output": {
+                                "S3Uri": "s3://sagemaker-project-p-fpyrmijfhs7s/day3demo-p-fpyrmijfhs7s/sklearn-abalone-2024-06-20-07-21-03-922/output/validation",
+                                "LocalPath": "/opt/ml/processing/validation",
+                                "S3UploadMode": "EndOfJob"
+                            }
+                        },
+                        {
+                            "OutputName": "test",
+                            "AppManaged": false,
+                            "S3Output": {
+                                "S3Uri": "s3://sagemaker-project-p-fpyrmijfhs7s/day3demo-p-fpyrmijfhs7s/sklearn-abalone-2024-06-20-07-21-03-922/output/test",
+                                "LocalPath": "/opt/ml/processing/test",
+                                "S3UploadMode": "EndOfJob"
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "Name": "TrainAbaloneModel",
+            "Type": "Training",
+            "Arguments": {
+                "AlgorithmSpecification": {
+                    "TrainingInputMode": "File",
+                    "TrainingImage": "764974769150.dkr.ecr.eu-west-2.amazonaws.com/sagemaker-xgboost:1.0-1-cpu-py3"
+                },
+                "OutputDataConfig": {
+                    "S3OutputPath": "s3://sagemaker-project-p-fpyrmijfhs7s/day3demo-p-fpyrmijfhs7s/AbaloneTrain"
+                },
+                "StoppingCondition": {
+                    "MaxRuntimeInSeconds": 86400
+                },
+                "ResourceConfig": {
+                    "InstanceCount": 1,
+                    "InstanceType": "ml.m5.xlarge",
+                    "VolumeSizeInGB": 30
+                },
+                "RoleArn": "arn:aws:iam::485186561655:role/service-role/AmazonSageMakerServiceCatalogProductsUseRole",
+                "InputDataConfig": [
+                    {
+                        "DataSource": {
+                            "S3DataSource": {
+                                "S3DataType": "S3Prefix",
+                                "S3Uri": {
+                                    "Get": "Steps.PreprocessAbaloneData.ProcessingOutputConfig.Outputs['train'].S3Output.S3Uri"
+                                },
+                                "S3DataDistributionType": "FullyReplicated"
+                            }
+                        },
+                        "ContentType": "text/csv",
+                        "ChannelName": "train"
+                    },
+                    {
+                        "DataSource": {
+                            "S3DataSource": {
+                                "S3DataType": "S3Prefix",
+                                "S3Uri": {
+                                    "Get": "Steps.PreprocessAbaloneData.ProcessingOutputConfig.Outputs['validation'].S3Output.S3Uri"
+                                },
+                                "S3DataDistributionType": "FullyReplicated"
+                            }
+                        },
+                        "ContentType": "text/csv",
+                        "ChannelName": "validation"
+                    }
+                ],
+                "HyperParameters": {
+                    "objective": "reg:linear",
+                    "num_round": "50",
+                    "max_depth": "5",
+                    "eta": "0.2",
+                    "gamma": "4",
+                    "min_child_weight": "6",
+                    "subsample": "0.7",
+                    "silent": "0"
+                },
+                "ProfilerRuleConfigurations": [
+                    {
+                        "RuleConfigurationName": "ProfilerReport-1718868065",
+                        "RuleEvaluatorImage": "250201462417.dkr.ecr.eu-west-2.amazonaws.com/sagemaker-debugger-rules:latest",
+                        "RuleParameters": {
+                            "rule_to_invoke": "ProfilerReport"
+                        }
+                    }
+                ],
+                "ProfilerConfig": {
+                    "S3OutputPath": "s3://sagemaker-project-p-fpyrmijfhs7s/day3demo-p-fpyrmijfhs7s/AbaloneTrain"
+                }
+            }
+        },
+        {
+            "Name": "EvaluateAbaloneModel",
+            "Type": "Processing",
+            "Arguments": {
+                "ProcessingResources": {
+                    "ClusterConfig": {
+                        "InstanceType": "ml.m5.xlarge",
+                        "InstanceCount": 1,
+                        "VolumeSizeInGB": 30
+                    }
+                },
+                "AppSpecification": {
+                    "ImageUri": "764974769150.dkr.ecr.eu-west-2.amazonaws.com/sagemaker-xgboost:1.0-1-cpu-py3",
+                    "ContainerEntrypoint": [
+                        "python3",
+                        "/opt/ml/processing/input/code/evaluate.py"
+                    ]
+                },
+                "RoleArn": "arn:aws:iam::485186561655:role/service-role/AmazonSageMakerServiceCatalogProductsUseRole",
+                "ProcessingInputs": [
+                    {
+                        "InputName": "input-1",
+                        "AppManaged": false,
+                        "S3Input": {
+                            "S3Uri": {
+                                "Get": "Steps.TrainAbaloneModel.ModelArtifacts.S3ModelArtifacts"
+                            },
+                            "LocalPath": "/opt/ml/processing/model",
+                            "S3DataType": "S3Prefix",
+                            "S3InputMode": "File",
+                            "S3DataDistributionType": "FullyReplicated",
+                            "S3CompressionType": "None"
+                        }
+                    },
+                    {
+                        "InputName": "input-2",
+                        "AppManaged": false,
+                        "S3Input": {
+                            "S3Uri": {
+                                "Get": "Steps.PreprocessAbaloneData.ProcessingOutputConfig.Outputs['test'].S3Output.S3Uri"
+                            },
+                            "LocalPath": "/opt/ml/processing/test",
+                            "S3DataType": "S3Prefix",
+                            "S3InputMode": "File",
+                            "S3DataDistributionType": "FullyReplicated",
+                            "S3CompressionType": "None"
+                        }
+                    },
+                    {
+                        "InputName": "code",
+                        "AppManaged": false,
+                        "S3Input": {
+                            "S3Uri": "s3://sagemaker-project-p-fpyrmijfhs7s/day3demo-p-fpyrmijfhs7s/script-abalone--2024-06-20-07-21-05-040/input/code/evaluate.py",
+                            "LocalPath": "/opt/ml/processing/input/code",
+                            "S3DataType": "S3Prefix",
+                            "S3InputMode": "File",
+                            "S3DataDistributionType": "FullyReplicated",
+                            "S3CompressionType": "None"
+                        }
+                    }
+                ],
+                "ProcessingOutputConfig": {
+                    "Outputs": [
+                        {
+                            "OutputName": "evaluation",
+                            "AppManaged": false,
+                            "S3Output": {
+                                "S3Uri": "s3://sagemaker-project-p-fpyrmijfhs7s/day3demo-p-fpyrmijfhs7s/script-abalone--2024-06-20-07-21-05-040/output/evaluation",
+                                "LocalPath": "/opt/ml/processing/evaluation",
+                                "S3UploadMode": "EndOfJob"
+                            }
+                        }
+                    ]
+                }
+            },
+            "PropertyFiles": [
+                {
+                    "PropertyFileName": "AbaloneEvaluationReport",
+                    "OutputName": "evaluation",
+                    "FilePath": "evaluation.json"
+                }
+            ]
+        },
+        {
+            "Name": "CheckMSEAbaloneEvaluation",
+            "Type": "Condition",
+            "Arguments": {
+                "Conditions": [
+                    {
+                        "Type": "LessThanOrEqualTo",
+                        "LeftValue": {
+                            "Std:JsonGet": {
+                                "PropertyFile": {
+                                    "Get": "Steps.EvaluateAbaloneModel.PropertyFiles.AbaloneEvaluationReport"
+                                },
+                                "Path": "regression_metrics.mse.value"
+                            }
+                        },
+                        "RightValue": 6
+                    }
+                ],
+                "IfSteps": [
+                    {
+                        "Name": "RegisterAbaloneModel-RegisterModel",
+                        "Type": "RegisterModel",
+                        "Arguments": {
+                            "ModelPackageGroupName": "day3demo-p-fpyrmijfhs7s",
+                            "ModelMetrics": {
+                                "ModelQuality": {
+                                    "Statistics": {
+                                        "ContentType": "application/json",
+                                        "S3Uri": "s3://sagemaker-project-p-fpyrmijfhs7s/day3demo-p-fpyrmijfhs7s/script-abalone--2024-06-20-07-21-05-040/output/evaluation/evaluation.json"
+                                    }
+                                },
+                                "Bias": {},
+                                "Explainability": {}
+                            },
+                            "InferenceSpecification": {
+                                "Containers": [
+                                    {
+                                        "Image": "764974769150.dkr.ecr.eu-west-2.amazonaws.com/sagemaker-xgboost:1.0-1-cpu-py3",
+                                        "Environment": {},
+                                        "ModelDataUrl": {
+                                            "Get": "Steps.TrainAbaloneModel.ModelArtifacts.S3ModelArtifacts"
+                                        }
+                                    }
+                                ],
+                                "SupportedContentTypes": [
+                                    "text/csv"
+                                ],
+                                "SupportedResponseMIMETypes": [
+                                    "text/csv"
+                                ],
+                                "SupportedRealtimeInferenceInstanceTypes": [
+                                    "ml.t2.medium",
+                                    "ml.m5.large"
+                                ],
+                                "SupportedTransformInstanceTypes": [
+                                    "ml.m5.large"
+                                ]
+                            },
+                            "ModelApprovalStatus": {
+                                "Get": "Parameters.ModelApprovalStatus"
+                            }
+                        }
+                    }
+                ],
+                "ElseSteps": []
+            }
+        }
+    ]
+}
